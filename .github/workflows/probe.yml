@@ -1,0 +1,29 @@
+name: probe-engine
+
+# Checks what required: true does for a workflow_call secret.
+
+on:
+  workflow_call:
+    secrets:
+      PROBE_KEY:
+        required: true
+
+permissions: {}
+
+jobs:
+  show:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Secret presence (sha256 only)
+        env:
+          P: ${{ secrets.PROBE_KEY }}
+        run: |
+          if [ -z "$P" ]; then echo "PRESENCE PROBE_KEY=<empty>"; else echo "PRESENCE PROBE_KEY=sha256:$(printf '%s' "$P" | sha256sum | cut -d' ' -f1)"; fi
+      - name: Fail closed when empty
+        env:
+          P: ${{ secrets.PROBE_KEY }}
+        run: |
+          if [ -z "$P" ]; then echo "::error::PROBE_KEY is empty"; exit 1; fi
+          echo "PROBE_KEY is set"

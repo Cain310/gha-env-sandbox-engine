@@ -1,0 +1,187 @@
+name: review-engine
+
+# Reusable workflow used by the sandbox caller repo.
+# Prints context and the sha256 of each secret it can see. Never prints values.
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        type: string
+        required: true
+      head_sha:
+        type: string
+        required: false
+        default: ""
+    secrets:
+      ANALYSIS_KEY:
+        required: true
+      PUBLISH_KEY:
+        required: true
+      PASSED_ANALYSIS_KEY:
+        required: false
+      ANALYSIS_EXTRA:
+        required: false
+      PUBLISH_EXTRA:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    concurrency:
+      group: gate-${{ inputs.pr_number }}
+      cancel-in-progress: true
+    steps:
+      - name: Context
+        env:
+          C_JOB: gate (no environment)
+          C_REPOSITORY: ${{ github.repository }}
+          C_EVENT: ${{ github.event_name }}
+          C_ACTION: ${{ github.event.action }}
+          C_REF: ${{ github.ref }}
+          C_SHA: ${{ github.sha }}
+          C_BASE_REF: ${{ github.base_ref }}
+          C_HEAD_REF: ${{ github.head_ref }}
+          C_PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          C_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          C_GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          C_GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          C_GITHUB_JOB_WORKFLOW_SHA: ${{ github.job_workflow_sha }}
+          C_JOB_WORKFLOW_REF: ${{ job.workflow_ref }}
+          C_JOB_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          C_JOB_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          C_JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
+          C_INPUT_PR: ${{ inputs.pr_number }}
+          C_INPUT_HEAD_SHA: ${{ inputs.head_sha }}
+        run: |
+          env | grep '^C_' | sort
+          env | grep -E '^GITHUB_(REF|SHA|REPOSITORY|EVENT_NAME|BASE_REF|HEAD_REF|WORKFLOW_REF|WORKFLOW_SHA)=' | sort
+      - name: Secret presence (sha256 only)
+        env:
+          S_ANALYSIS_KEY: ${{ secrets.ANALYSIS_KEY }}
+          S_PUBLISH_KEY: ${{ secrets.PUBLISH_KEY }}
+          S_PASSED_ANALYSIS_KEY: ${{ secrets.PASSED_ANALYSIS_KEY }}
+          S_ANALYSIS_EXTRA: ${{ secrets.ANALYSIS_EXTRA }}
+          S_PUBLISH_EXTRA: ${{ secrets.PUBLISH_EXTRA }}
+        run: |
+          for n in S_ANALYSIS_KEY S_PUBLISH_KEY S_PASSED_ANALYSIS_KEY S_ANALYSIS_EXTRA S_PUBLISH_EXTRA; do
+            v="${!n}"
+            if [ -z "$v" ]; then echo "PRESENCE ${n#S_}=<empty>"; else echo "PRESENCE ${n#S_}=sha256:$(printf '%s' "$v" | sha256sum | cut -d' ' -f1)"; fi
+          done
+
+  analysis:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: analysis
+    permissions:
+      contents: read
+    concurrency:
+      group: analysis-${{ inputs.pr_number }}
+      cancel-in-progress: true
+    steps:
+      - name: Context
+        env:
+          C_JOB: analysis (environment analysis)
+          C_REPOSITORY: ${{ github.repository }}
+          C_EVENT: ${{ github.event_name }}
+          C_ACTION: ${{ github.event.action }}
+          C_REF: ${{ github.ref }}
+          C_SHA: ${{ github.sha }}
+          C_BASE_REF: ${{ github.base_ref }}
+          C_HEAD_REF: ${{ github.head_ref }}
+          C_PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          C_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          C_GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          C_GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          C_GITHUB_JOB_WORKFLOW_SHA: ${{ github.job_workflow_sha }}
+          C_JOB_WORKFLOW_REF: ${{ job.workflow_ref }}
+          C_JOB_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          C_JOB_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          C_JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
+          C_INPUT_PR: ${{ inputs.pr_number }}
+          C_INPUT_HEAD_SHA: ${{ inputs.head_sha }}
+        run: |
+          env | grep '^C_' | sort
+          env | grep -E '^GITHUB_(REF|SHA|REPOSITORY|EVENT_NAME|BASE_REF|HEAD_REF|WORKFLOW_REF|WORKFLOW_SHA)=' | sort
+      - name: Secret presence (sha256 only)
+        env:
+          S_ANALYSIS_KEY: ${{ secrets.ANALYSIS_KEY }}
+          S_PUBLISH_KEY: ${{ secrets.PUBLISH_KEY }}
+          S_PASSED_ANALYSIS_KEY: ${{ secrets.PASSED_ANALYSIS_KEY }}
+          S_ANALYSIS_EXTRA: ${{ secrets.ANALYSIS_EXTRA }}
+          S_PUBLISH_EXTRA: ${{ secrets.PUBLISH_EXTRA }}
+        run: |
+          for n in S_ANALYSIS_KEY S_PUBLISH_KEY S_PASSED_ANALYSIS_KEY S_ANALYSIS_EXTRA S_PUBLISH_EXTRA; do
+            v="${!n}"
+            if [ -z "$v" ]; then echo "PRESENCE ${n#S_}=<empty>"; else echo "PRESENCE ${n#S_}=sha256:$(printf '%s' "$v" | sha256sum | cut -d' ' -f1)"; fi
+          done
+
+  publish:
+    needs: analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: publish
+    permissions:
+      checks: write
+    concurrency:
+      group: publish-${{ inputs.pr_number }}
+      cancel-in-progress: false
+    steps:
+      - name: Context
+        env:
+          C_JOB: publish (environment publish)
+          C_REPOSITORY: ${{ github.repository }}
+          C_EVENT: ${{ github.event_name }}
+          C_ACTION: ${{ github.event.action }}
+          C_REF: ${{ github.ref }}
+          C_SHA: ${{ github.sha }}
+          C_BASE_REF: ${{ github.base_ref }}
+          C_HEAD_REF: ${{ github.head_ref }}
+          C_PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          C_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          C_GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          C_GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          C_GITHUB_JOB_WORKFLOW_SHA: ${{ github.job_workflow_sha }}
+          C_JOB_WORKFLOW_REF: ${{ job.workflow_ref }}
+          C_JOB_WORKFLOW_SHA: ${{ job.workflow_sha }}
+          C_JOB_WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          C_JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
+          C_INPUT_PR: ${{ inputs.pr_number }}
+          C_INPUT_HEAD_SHA: ${{ inputs.head_sha }}
+        run: |
+          env | grep '^C_' | sort
+          env | grep -E '^GITHUB_(REF|SHA|REPOSITORY|EVENT_NAME|BASE_REF|HEAD_REF|WORKFLOW_REF|WORKFLOW_SHA)=' | sort
+      - name: Secret presence (sha256 only)
+        env:
+          S_ANALYSIS_KEY: ${{ secrets.ANALYSIS_KEY }}
+          S_PUBLISH_KEY: ${{ secrets.PUBLISH_KEY }}
+          S_PASSED_ANALYSIS_KEY: ${{ secrets.PASSED_ANALYSIS_KEY }}
+          S_ANALYSIS_EXTRA: ${{ secrets.ANALYSIS_EXTRA }}
+          S_PUBLISH_EXTRA: ${{ secrets.PUBLISH_EXTRA }}
+        run: |
+          for n in S_ANALYSIS_KEY S_PUBLISH_KEY S_PASSED_ANALYSIS_KEY S_ANALYSIS_EXTRA S_PUBLISH_EXTRA; do
+            v="${!n}"
+            if [ -z "$v" ]; then echo "PRESENCE ${n#S_}=<empty>"; else echo "PRESENCE ${n#S_}=sha256:$(printf '%s' "$v" | sha256sum | cut -d' ' -f1)"; fi
+          done
+      - name: Create check run on PR head
+        if: inputs.head_sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ inputs.head_sha }}
+          PR: ${{ inputs.pr_number }}
+        run: |
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/check-runs" \
+            -f name="sandbox-review" \
+            -f head_sha="${HEAD_SHA}" \
+            -f status=completed \
+            -f conclusion=neutral \
+            -f "output[title]=sandbox review" \
+            -f "output[summary]=PR ${PR} run ${GITHUB_RUN_ID} attempt ${GITHUB_RUN_ATTEMPT}" \
+            --jq '{id, head_sha, html_url, app: .app.slug, check_suite: .check_suite.id}'
